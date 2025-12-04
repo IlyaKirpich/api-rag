@@ -49,7 +49,7 @@ class AppContext:
             self.vector_store, self.text_splitter, self.file_repository
         )
         self.llm = init_chat_model(
-            "gpt-4o-mini",
+            "gpt-3.5-turbo",
             model_provider="openai",
             api_key=settings.openai_api_key
         )
