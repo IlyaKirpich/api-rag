@@ -2,17 +2,19 @@ from sqlmodel import create_engine
 from pydantic_settings import BaseSettings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
-from langchain_postgres.vectorstores import PGVector
+from qdrant_client import QdrantClient
+from langchain_qdrant import QdrantVectorStore
 from pdf_analyzer.services import DocumentService, AIService, ChatService
 from langchain.chat_models import init_chat_model
 from pdf_analyzer.repositories import FileRepository, ChatRepository, MessageRepository
 
 
 class AppSettings(BaseSettings):
-
     db_url: str
     openai_api_key: str
     debug: bool = False
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_api_key: str | None = None
     vector_store_collection_name: str = "pdf_analyzer_documents"
     embedding_model: str = "text-embedding-3-large"
 
@@ -22,43 +24,54 @@ class AppSettings(BaseSettings):
 
 
 class AppContext:
-
     def __init__(self, settings: AppSettings):
         self.db_engine = create_engine(settings.db_url, echo=settings.debug)
+        
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
             chunk_overlap=200,
             add_start_index=True
         )
+        
         self.embeddings = OpenAIEmbeddings(
-            api_key=settings.openai_api_key, model=settings.embedding_model
+            api_key=settings.openai_api_key, 
+            model=settings.embedding_model
         )
-        self.vector_store = PGVector(
+        
+        qdrant_client = QdrantClient(
+            url=settings.qdrant_url,
+            api_key=settings.qdrant_api_key if settings.qdrant_api_key else None,
+        )
+        
+        self.vector_store = QdrantVectorStore(
+            client=qdrant_client,
             collection_name=settings.vector_store_collection_name,
-            connection=settings.db_url.replace(
-                "postgresql://", "postgresql+psycopg://"
-            ),
             embeddings=self.embeddings,
-            use_jsonb=True,
-            async_mode=True
+            distance_strategy="Cosine",
         )
+
         self.file_repository = FileRepository()
         self.chat_repository = ChatRepository()
         self.message_repository = MessageRepository()
+        
+
         self.document_svc = DocumentService(
             self.vector_store, self.text_splitter, self.file_repository
         )
+        
         self.llm = init_chat_model(
             "gpt-3.5-turbo",
             model_provider="openai",
-            api_key=settings.openai_api_key
+            api_key=settings.openai_api_key,
+            temperature=0.1,
         )
+        
         self.ai_svc = AIService(self.llm)
         self.chat_svc = ChatService(
             self.chat_repository,
             self.message_repository,
             self.ai_svc,
-            self.document_svc
+            self.document_svc,
         )
 
 
