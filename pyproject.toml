@@ -3,7 +3,6 @@ name = "python-rag-api"
 version = "0.1.0"
 description = ""
 authors = [
-    {name = "Vitalii Honchar",email = "weaxme@gmail.com"}
 ]
 readme = "README.md"
 requires-python = ">=3.12,<4.0"
